@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Server Cost Visualizer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+  <div class="max-w-7xl mx-auto">
+    <h1 class="text-3xl font-bold text-center mb-6 text-indigo-600">📊 Server Cost Visualizer</h1>
+    <div class="mb-6">
+      <p class="text-lg text-gray-700">Paste your server pricing JSON data below and click <span class="font-semibold">Load Data</span> to view interactive charts comparing server costs and specifications.</p>
+      <div class="mt-4 p-4 bg-white rounded shadow text-sm text-gray-700">
+        <h2 class="text-lg font-semibold mb-2 text-indigo-700">Expected JSON Format</h2>
+        <pre class="whitespace-pre overflow-x-auto"><code>{
+  "servers": [
+    {
+      "provider": "Provider Name",
+      "model": "Server Model",
+      "cores": 16,
+      "threads": 32,
+      "ghz_per_core": 2.4,
+      "ram_gb": 64,
+      "monthly_cost_usd": 300.00,
+      "cost_per_ghz_month": 7.81,
+      "cost_per_thread_month": 9.38,
+      "cost_per_ram_gb_month": 4.69
+    },
+    ...
+  ]
+}</code></pre>
+      </div>
+    </div>
+    <div class="flex flex-col md:flex-row gap-4 mb-8">
+      <textarea id="jsonInput" class="w-full md:w-2/3 p-4 border rounded shadow text-sm font-mono" rows="10" placeholder="Paste JSON data here..."></textarea>
+      <button id="load" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-3 rounded shadow self-start">Load Data</button>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="bg-white p-4 rounded shadow">
+        <h2 class="text-xl font-semibold mb-2 text-gray-800">Cost per GHz</h2>
+        <canvas id="chartGHz"></canvas>
+      </div>
+      <div class="bg-white p-4 rounded shadow">
+        <h2 class="text-xl font-semibold mb-2 text-gray-800">Cost per Thread</h2>
+        <canvas id="chartThreads"></canvas>
+      </div>
+      <div class="bg-white p-4 rounded shadow col-span-1 lg:col-span-2">
+        <h2 class="text-xl font-semibold mb-2 text-gray-800">RAM vs CPU Cores (Scatter)</h2>
+        <canvas id="chartScatter"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let chartGHz, chartThreads, chartScatter;
+    function createCharts(data) {
+      // Sort servers by cost_per_ghz_month
+      const sorted = [...data.servers].sort((a, b) => a.cost_per_ghz_month - b.cost_per_ghz_month);
+      const providers = [...new Set(sorted.map(s => s.provider))];
+      const providerColors = {
+        ...Object.fromEntries(providers.map((p, i) => [p, `hsl(${i * 50}, 70%, 60%)`]))
+      };
+
+      const labels = sorted.map(s => s.provider + "\n" + s.model);
+      const costGHz = sorted.map(s => s.cost_per_ghz_month);
+      const costThreads = sorted.map(s => s.cost_per_thread_month);
+      const scatterData = sorted.map(s => ({
+        x: s.cores,
+        y: s.ram_gb,
+        r: Math.max(4, s.cost_per_ghz_month / 2),
+        backgroundColor: providerColors[s.provider]
+      }));
+
+      const backgroundColorsGHz = sorted.map(s => providerColors[s.provider]);
+      const backgroundColorsThreads = sorted.map(s => providerColors[s.provider]);
+
+      if (chartGHz) chartGHz.destroy();
+      if (chartThreads) chartThreads.destroy();
+      if (chartScatter) chartScatter.destroy();
+
+      chartGHz = new Chart(document.getElementById("chartGHz"), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: "Cost per GHz ($)",
+            data: costGHz,
+            backgroundColor: backgroundColorsGHz,
+            borderWidth: 1
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          scales: { x: { beginAtZero: true } }
+        }
+      });
+
+      chartThreads = new Chart(document.getElementById("chartThreads"), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: "Cost per Thread ($)",
+            data: costThreads,
+            backgroundColor: backgroundColorsThreads,
+            borderWidth: 1
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          scales: { x: { beginAtZero: true } }
+        }
+      });
+
+      chartScatter = new Chart(document.getElementById("chartScatter"), {
+        type: 'bubble',
+        data: {
+          datasets: scatterData.map((d, i) => ({
+            label: labels[i],
+            data: [d],
+            backgroundColor: d.backgroundColor
+          }))
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: {
+              title: { display: true, text: 'CPU Cores' },
+              beginAtZero: true
+            },
+            y: {
+              title: { display: true, text: 'RAM (GB)' },
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+
+    document.getElementById("load").addEventListener("click", () => {
+      try {
+        const jsonText = document.getElementById("jsonInput").value;
+        const jsonData = JSON.parse(jsonText);
+        createCharts(jsonData);
+      } catch (error) {
+        alert("Invalid JSON: " + error.message);
+      }
+    });
+  </script>
+</body>
+</html>
