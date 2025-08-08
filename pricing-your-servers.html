@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cloud Economics & Projection Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { /* Themes and Variables */
+            --ease-out-quad: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        :root[data-theme="light"] {
+            --bg-color: #f8f9fa; --surface-color: #ffffff; --text-primary: #212529; --text-secondary: #6c757d;
+            --border-color: #dee2e6; --accent-color: #0d6efd; --accent-light: rgba(13, 110, 253, 0.2);
+            --positive-color: #198754; --negative-color: #dc3545; --warn-color: #ffc107; --grey-color: #6c757d;
+        }
+        :root[data-theme="dark"] {
+            --bg-color: #1a202c; --surface-color: #2d3748; --text-primary: #e2e8f0; --text-secondary: #a0aec0;
+            --border-color: #4a5568; --accent-color: #4299e1; --accent-light: rgba(66, 153, 225, 0.2);
+            --positive-color: #48bb78; --negative-color: #f56565; --warn-color: #ecc94b; --grey-color: #718096;
+        }
+        /* Base Styles */
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0;
+            background-color: var(--bg-color); color: var(--text-primary);
+            transition: background-color 0.3s var(--ease-out-quad), color 0.3s var(--ease-out-quad);
+        }
+        h1, h2, h3 { color: var(--text-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; margin-top:0; }
+        header { 
+            padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--accent-color);
+        }
+        main { padding: 0 2rem; }
+        .layout { display: grid; grid-template-columns: 450px 1fr; gap: 2rem; }
+        @media (max-width: 1200px) { .layout { grid-template-columns: 1fr; } }
+        /* Component Styles */
+        .card { background-color: var(--surface-color); border-radius: 8px; padding: 1.5rem; border: 1px solid var(--border-color); }
+        .intro-card { margin-bottom: 2rem; line-height: 1.6; }
+        #theme-toggle, #reset-button {
+            background: var(--surface-color); border: 1px solid var(--border-color); color: var(--text-secondary);
+            padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; margin-left: 0.5rem;
+        }
+        fieldset { border: 1px solid var(--border-color); border-radius: 4px; padding: 1rem; margin-bottom: 1rem; }
+        legend { padding: 0 0.5rem; font-weight: 500; color: var(--accent-color);
+            display: flex; align-items: center; } /* Added for legend tooltip */
+        .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; font-weight: 500; color: var(--text-secondary); font-size: 0.9rem;}
+        input[type="number"] { width: 100%; background-color: var(--bg-color); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); padding: 0.5rem; box-sizing: border-box; }
+        .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; }
+        .kpi-card { background-color: var(--bg-color); padding: 1rem; border-radius: 6px; text-align: center; border: 1px solid var(--border-color);}
+        .kpi-title { font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: center; }
+        .kpi-value { font-size: 1.5rem; font-weight: 600; }
+        .positive { color: var(--positive-color); } .negative { color: var(--negative-color); }
+        /* Tooltip Styles */
+        .tooltip-trigger {
+            position: relative; cursor: help; margin-left: 8px; border: 1px solid var(--text-secondary);
+            border-radius: 50%; width: 16px; height: 16px; display: inline-flex;
+            justify-content: center; align-items: center; font-size: 11px;
+        }
+        .tooltip-trigger .tooltip-text {
+            visibility: hidden; width: 280px; background-color: var(--bg-color); color: var(--text-primary);
+            text-align: left; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px;
+            position: absolute; z-index: 1; bottom: 125%; left: 50%; margin-left: -140px;
+            opacity: 0; transition: opacity 0.3s; font-size: 0.85rem; line-height: 1.5;
+        }
+        .tooltip-trigger:hover .tooltip-text { visibility: visible; opacity: 1; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Cloud Economics & Projection</h1>
+        <div>
+            <button id="reset-button" title="Reset all inputs to their default values">Reset to Default</button>
+            <button id="theme-toggle" title="Toggle light/dark mode">☀️ / 🌙</button>
+        </div>
+    </header>
+    <main>
+        <div class="intro-card">
+            <h3>What is this?</h3>
+            <p>This is a deterministic financial modeling tool for planning a cloud hosting service. It helps you understand the relationship between hardware costs, operational expenses, pricing, and long-term profitability.</p>
+            <h3>How it Works</h3>
+            <p>The calculation is a two-step process:</p>
+            <ol>
+                <li><strong>Unit Economics:</strong> It first calculates the monthly cost and potential revenue of a <strong>single server</strong>. This determines if your fundamental business unit is profitable.</li>
+                <li><strong>Profitability Projection:</strong> It then runs a 5-year simulation. As customers grow, the simulation "purchases" new servers on demand. Crucially, it respects the <strong>Total Servers</strong> limit. If the cap is reached, customer growth will plateau, as no more VMs can be provisioned. This models real-world infrastructure constraints.</li>
+            </ol>
+        </div>
+        <div class="layout">
+            <div class="controls-panel">
+                 <div class="card">
+                    <!-- Fieldsets for all inputs -->
+                    <fieldset>
+                         <legend>Server Hardware & Costs</legend>
+                         <div class="input-grid">
+                            <div><label>Server Cores <span class="tooltip-trigger">?
+                                <span class="tooltip-text">Total physical CPU cores in a single server. This is a primary driver of VM capacity.</span>
+                            </span></label><input type="number" id="serverCores"></div>
+                            <div><label>Server RAM (GB) <span class="tooltip-trigger">?
+                                <span class="tooltip-text">Total physical RAM in a single server. Often the main bottleneck for VM capacity.</span>
+                            </span></label><input type="number" id="serverRam"></div>
+                            <div><label>Upfront Cost ($) <span class="tooltip-trigger">?
+                                <span class="tooltip-text">The total capital expenditure (CapEx) to purchase one server.</span>
+                            </span></label><input type="number" id="serverCapex"></div>
+                            <div><label>Amortization (Yrs) <span class="tooltip-trigger">?
+                                <span class="tooltip-text">The lifespan over which you depreciate the server's cost. This turns a large upfront cost into a smaller, predictable monthly operational expense (OpEx). Setting to 0 means the entire CapEx is expensed in one month.</span>
+                            </span></label><input type="number" id="amortizationYears" min="0"></div>
+                         </div>
+                    </fieldset>
+                    <fieldset>
+                         <legend>Datacenter & Overhead</legend>
+                         <div class="input-grid">
+                             <div><label>Power Cost ($/kWh) <span class="tooltip-trigger">?
+                                <span class="tooltip-text">The price your utility company charges for one kilowatt-hour of electricity.</span>
+                             </span></label><input type="number" id="powerCost" step="0.01"></div>
+                             <div><label>PUE <span class="tooltip-trigger">?
+                                <span class="tooltip-text">Power Usage Effectiveness. A PUE of 1.5 means for every 1W the server uses, you pay for 1.5W to cover cooling & overhead. Datacenter standard.</span>
+                             </span></label><input type="number" id="pue" step="0.1"></div>
+                             <div><label>Total Servers <span class="tooltip-trigger">?
+                                 <span class="tooltip-text">The absolute maximum number of servers your infrastructure can support. This sets a hard cap on growth in the projection.</span>
+                             </span></label><input type="number" id="totalServers"></div>
+                             <div><label>Fixed Overhead ($/mo) <span class="tooltip-trigger">?
+                                 <span class="tooltip-text">Fixed monthly costs that do not scale directly with servers, such as salaries, rent, and internet connectivity.</span>
+                             </span></label><input type="number" id="monthlyOverhead"></div>
+                         </div>
+                    </fieldset>
+                     <fieldset>
+                         <legend>VM Instance Pricing ($/mo) <span class="tooltip-trigger">?
+                             <span class="tooltip-text">Monthly price for each VM size. The model assumes a fixed customer distribution of 60% Small VMs, 30% Medium, and 10% Large to calculate an average customer value.</span>
+                         </span></legend>
+                         <div class="input-grid">
+                            <div><label>Small (2v/4GB)</label><input type="number" id="priceSmall"></div>
+                            <div><label>Medium (4v/8GB)</label><input type="number" id="priceMedium"></div>
+                            <div><label>Large (8v/16GB)</label><input type="number" id="priceLarge"></div>
+                         </div>
+                    </fieldset>
+                    <fieldset>
+                         <legend>Growth & Churn Model</legend>
+                         <div class="input-grid">
+                            <div><label>Initial Customers</label><input type="number" id="initialCustomers"></div>
+                            <div><label>Growth Rate (%/mo) <span class="tooltip-trigger">?
+                                <span class="tooltip-text">The percentage increase in customers each month. Applied as: CustomerCount * (1 + GrowthRate - ChurnRate).</span>
+                            </span></label><input type="number" id="monthlyGrowthRate"></div>
+                            <div><label>Util. Target (%) <span class="tooltip-trigger">?
+                                <span class="tooltip-text">The target utilization for your server fleet. A new server is "purchased" when utilization would exceed this threshold. 80% is a common industry standard to allow for burst capacity.</span>
+                            </span></label><input type="number" id="utilizationTarget" max="100"></div>
+                            <div><label>Churn Rate (%/mo) <span class="tooltip-trigger">?
+                                <span class="tooltip-text">The percentage of existing customers who leave each month. Applied as: CustomerCount * (1 + GrowthRate - ChurnRate).</span>
+                            </span></label><input type="number" id="churnRate"></div>
+                         </div>
+                    </fieldset>
+                 </div>
+            </div>
+            <div class="results-panel">
+                 <!-- Results Cards -->
+                <div class="card" style="margin-bottom: 2rem;">
+                    <h2>5-Year Profitability Projection</h2>
+                    <div style="height: 350px;"><canvas id="projectionChart"></canvas></div>
+                </div>
+                 <div class="card">
+                    <h2>Unit Economics (Per Server/Month)</h2>
+                    <div class="kpi-grid">
+                        <div class="kpi-card">
+                            <div class="kpi-title">Profit @ Target Utilization</div>
+                            <div class="kpi-value" id="kpi-profit-server">$0</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-title">Breakeven Utilization <span class="tooltip-trigger">?
+                                <span class="tooltip-text">The server utilization percentage required to cover all monthly costs. If this is above your target utilization, you will lose money on each server.</span>
+                            </span></div>
+                            <div class="kpi-value" id="kpi-breakeven">0%</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-title">Total Monthly Cost</div>
+                            <div class="kpi-value" id="kpi-cost">$0</div>
+                        </div>
+                         <div class="kpi-card">
+                             <div class="kpi-title">Max VMs <span class="tooltip-trigger">?
+                                <span class="tooltip-text">The theoretical maximum number of average-sized VMs that can fit on one server, based on CPU and RAM limits.</span>
+                             </span></div>
+                             <div class="kpi-value" id="kpi-vms">0</div>
+                         </div>
+                    </div>
+                    <div>
+                        <h3>Server VM Capacity (Limited by <span id="limitingFactor"></span>)</h3>
+                        <div style="height: 50px;"><canvas id="utilizationChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+<script>
+const App = {
+    state: { projectionChart: null, utilizationChart: null },
+    
+    defaultConfig: { /* Unchanged */
+        serverCores: 32, serverRam: 256, serverCapex: 6500, amortizationYears: 4,
+        powerCost: 0.12, pue: 1.5, totalServers: 20, monthlyOverhead: 8000,
+        priceSmall: 28, priceMedium: 50, priceLarge: 95,
+        initialCustomers: 20, monthlyGrowthRate: 15, utilizationTarget: 80, churnRate: 2,
+    },
+
+    setup() { /* Unchanged */
+        this.addEventListeners();
+        this.setupTheme();
+        this.resetToDefaults();
+    },
+
+    addEventListeners() { /* Unchanged */
+        document.getElementById('theme-toggle').addEventListener('click', () => this.toggleTheme());
+        document.getElementById('reset-button').addEventListener('click', () => this.resetToDefaults());
+        Object.keys(this.defaultConfig).forEach(key => {
+            const el = document.getElementById(key);
+            if (el) el.addEventListener('input', () => this.update());
+        });
+    },
+
+    setupTheme() { /* Unchanged */
+        const getTheme = () => localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        this.setTheme(getTheme());
+    },
+
+    setTheme(theme) { /* Unchanged */
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('theme', theme);
+    },
+
+    toggleTheme() { /* Unchanged */
+        const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        this.setTheme(newTheme);
+        this.update();
+    },
+    
+    resetToDefaults() { /* Unchanged */
+        for (const key in this.defaultConfig) {
+            const el = document.getElementById(key);
+            if (el) {
+                el.value = this.defaultConfig[key];
+            }
+        }
+        this.update();
+    },
+
+    getChartColors() { /* Unchanged */
+        const styles = getComputedStyle(document.documentElement);
+        return {
+            textColor: styles.getPropertyValue('--text-secondary').trim(),
+            gridColor: styles.getPropertyValue('--border-color').trim(),
+            accentColor: styles.getPropertyValue('--accent-color').trim(),
+            accentLight: styles.getPropertyValue('--accent-light').trim(),
+            warnColor: styles.getPropertyValue('--warn-color').trim(),
+            warnLight: styles.getPropertyValue('--warn-color').trim() + '80', // Add alpha
+            positiveColor: styles.getPropertyValue('--positive-color').trim() + '80',
+            surfaceDim: 'rgba(108, 117, 125, 0.2)'
+        };
+    },
+    
+    getUiConfig() { /* Unchanged */
+        const getVal = (id) => parseFloat(document.getElementById(id).value) || 0;
+        return {
+            server: { cores: getVal('serverCores'), ram: getVal('serverRam'), capex: getVal('serverCapex'), powerWatts: 400, rackUnits: 2 },
+            amortizationMonths: getVal('amortizationYears') * 12,
+            monthlyOverhead: getVal('monthlyOverhead'),
+            totalPlannedServers: getVal('totalServers'),
+            dc: { powerCostPerKwh: getVal('powerCost'), pue: getVal('pue'), rackCostPerU: 20 },
+            prices: { small: getVal('priceSmall'), medium: getVal('priceMedium'), large: getVal('priceLarge') },
+            growth: {
+                initialCustomers: getVal('initialCustomers'), monthlyGrowthRate: getVal('monthlyGrowthRate') / 100,
+                utilizationTarget: getVal('utilizationTarget') / 100, churnRate: getVal('churnRate') / 100
+            },
+            oversubscription: { cpu: 4, ram: 1.5 },
+            instanceMix: { small: 0.6, medium: 0.3, large: 0.1 },
+            vmSpecs: { small: { vcpu: 2, ram: 4 }, medium: { vcpu: 4, ram: 8 }, large: { vcpu: 8, ram: 16 } }
+        };
+    },
+
+    calculateUnitEconomics(config) { /* Unchanged */
+        const { server, dc, amortizationMonths, totalPlannedServers } = config;
+        const cost_hardware = amortizationMonths > 0 ? server.capex / amortizationMonths : server.capex;
+        const cost_power = (server.powerWatts / 1000) * 730 * dc.pue * dc.powerCostPerKwh;
+        const cost_rack = server.rackUnits * dc.rackCostPerU;
+        const cost_overhead = totalPlannedServers > 0 ? config.monthlyOverhead / totalPlannedServers : 0;
+        const totalMonthlyCostPerServer = cost_hardware + cost_power + cost_rack + cost_overhead;
+
+        const capacity = { vcpu: server.cores * config.oversubscription.cpu, ram: server.ram * config.oversubscription.ram };
+        const avgVmSpec = {
+            vcpu: Object.entries(config.instanceMix).reduce((s, [t, r]) => s + config.vmSpecs[t].vcpu * r, 0),
+            ram: Object.entries(config.instanceMix).reduce((s, [t, r]) => s + config.vmSpecs[t].ram * r, 0),
+            price: Object.entries(config.instanceMix).reduce((s, [t, r]) => s + config.prices[t] * r, 0)
+        };
+        const vmsLimitedByCpu = avgVmSpec.vcpu > 0 ? Math.floor(capacity.vcpu / avgVmSpec.vcpu) : Infinity;
+        const vmsLimitedByRam = avgVmSpec.ram > 0 ? Math.floor(capacity.ram / avgVmSpec.ram) : Infinity;
+        const maxVmsPerServer = Math.min(vmsLimitedByCpu, vmsLimitedByRam);
+        
+        const fullPotentialRevenue = maxVmsPerServer * avgVmSpec.price;
+        const breakevenUtilization = fullPotentialRevenue > 0 ? (totalMonthlyCostPerServer / fullPotentialRevenue) : Infinity;
+        const revenueAtTarget = fullPotentialRevenue * config.growth.utilizationTarget;
+        const profitAtTarget = revenueAtTarget - totalMonthlyCostPerServer;
+        
+        return {
+            profitAtTarget, breakevenUtilization, totalMonthlyCostPerServer,
+            maxVmsPerServer, avgVmPrice: avgVmSpec.price,
+            limitingFactor: vmsLimitedByCpu < vmsLimitedByRam ? 'CPU' : 'RAM'
+        };
+    },
+
+    runProjection(config, unitEconomics) { /* Unchanged */
+        let customerCount = config.growth.initialCustomers;
+        let history = [], purchaseEvents = [], cumulativeProfit = 0, servers = 1;
+        const maxPossibleCustomers = config.totalPlannedServers * unitEconomics.maxVmsPerServer * config.growth.utilizationTarget;
+
+        for (let month = 1; month <= 60; month++) {
+            let lastMonthServers = servers;
+            const netGrowthRate = 1 + config.growth.monthlyGrowthRate - config.growth.churnRate;
+            customerCount *= netGrowthRate;
+            customerCount = Math.min(customerCount, maxPossibleCustomers);
+            
+            const requiredServers = unitEconomics.maxVmsPerServer > 0 ? Math.ceil(customerCount / (unitEconomics.maxVmsPerServer * config.growth.utilizationTarget)) : 1;
+            const cappedServers = Math.min(requiredServers, config.totalPlannedServers);
+            servers = Math.max(servers, cappedServers, 1);
+            
+            const revenue = customerCount * unitEconomics.avgVmPrice;
+            const totalCost = servers * unitEconomics.totalMonthlyCostPerServer;
+            const monthlyProfit = revenue - totalCost;
+            cumulativeProfit += monthlyProfit;
+            history.push({ x: month, y: cumulativeProfit, monthly: monthlyProfit });
+
+            if (servers > lastMonthServers) {
+                purchaseEvents.push({ x: month, y: cumulativeProfit });
+            }
+        }
+        return { history, purchaseEvents };
+    },
+
+    update() { /* Unchanged */
+        const config = this.getUiConfig();
+        const unitEconomics = this.calculateUnitEconomics(config);
+        const { history, purchaseEvents } = this.runProjection(config, unitEconomics);
+        this.renderKpis(unitEconomics);
+        this.renderUtilizationChart(unitEconomics, config);
+        this.renderProjectionChart(history, purchaseEvents);
+    },
+    
+    renderKpis(r) { /* Unchanged */
+        const toUSD = (v) => v.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+        const profitEl = document.getElementById('kpi-profit-server');
+        profitEl.textContent = toUSD(r.profitAtTarget);
+        profitEl.className = 'kpi-value ' + (r.profitAtTarget > 0 ? 'positive' : 'negative');
+        const breakevenEl = document.getElementById('kpi-breakeven');
+        breakevenEl.textContent = isFinite(r.breakevenUtilization) ? `${(r.breakevenUtilization * 100).toFixed(1)}%` : 'N/A';
+        breakevenEl.className = 'kpi-value ' + (r.breakevenUtilization > 1 ? 'negative' : 'positive');
+        document.getElementById('kpi-cost').textContent = toUSD(r.totalMonthlyCostPerServer);
+        document.getElementById('kpi-vms').textContent = r.maxVmsPerServer;
+    },
+    
+    renderProjectionChart(history, purchaseEvents) { /* Unchanged */
+        const colors = this.getChartColors();
+        const data = {
+            datasets: [
+                {
+                    label: 'Cumulative Profit', data: history, yAxisID: 'yCumulative',
+                    borderColor: colors.accentColor, backgroundColor: colors.accentLight,
+                    fill: true, tension: 0.4, pointRadius: 0, order: 2
+                }, 
+                {
+                    label: 'Monthly Profit', data: history.map(h => ({x: h.x, y: h.monthly})), yAxisID: 'yMonthly',
+                    borderColor: colors.positiveColor, borderDash: [5, 5],
+                    fill: false, tension: 0.1, pointRadius: 0, order: 3
+                },
+                {
+                    label: 'Server Purchase', data: purchaseEvents, yAxisID: 'yCumulative',
+                    type: 'bubble', pointStyle: 'circle',
+                    radius: 5, hoverRadius: 8,
+                    backgroundColor: colors.warnLight, borderColor: colors.warnColor, order: 1
+                }
+            ]
+        };
+        const options = {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: { type: 'linear', title: { display: true, text: 'Months', color: colors.textColor }, ticks: { color: colors.textColor }, grid: { color: colors.gridColor } },
+                yCumulative: { type: 'linear', position: 'left', title: { display: true, text: 'Cumulative Profit', color: colors.textColor }, ticks: { color: colors.textColor, callback: v => `$${(v/1000).toFixed(0)}k` }, grid: { color: colors.gridColor } },
+                yMonthly: { type: 'linear', position: 'right', title: { display: true, text: 'Monthly Profit', color: colors.textColor }, ticks: { color: colors.textColor, callback: v => `$${(v/1000).toFixed(0)}k` }, grid: { drawOnChartArea: false } }
+            },
+            plugins: {
+                legend: { display: true, labels: { color: colors.textColor } },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.dataset.label || '';
+                            if (label === 'Server Purchase') return `Server Purchase at Month ${context.raw.x}`;
+                            return `${label}: ${context.formattedValue}`;
+                        }
+                    }
+                }
+            }
+        };
+
+        if (this.state.projectionChart) {
+            this.state.projectionChart.data = data;
+            this.state.projectionChart.options = options;
+            this.state.projectionChart.update();
+        } else {
+            this.state.projectionChart = new Chart('projectionChart', { type: 'line', data, options });
+        }
+    },
+
+    renderUtilizationChart(r, c) { /* Unchanged */
+        const colors = this.getChartColors();
+        document.getElementById('limitingFactor').textContent = r.limitingFactor;
+        const vmsAtTarget = Math.floor(r.maxVmsPerServer * c.growth.utilizationTarget);
+        const data = {
+            labels: ['VMs'],
+            datasets: [
+                { label: `Used (${(c.growth.utilizationTarget * 100).toFixed(0)}%)`, data: [vmsAtTarget], backgroundColor: colors.accentLight },
+                { label: 'Available', data: [r.maxVmsPerServer - vmsAtTarget], backgroundColor: colors.surfaceDim }
+            ]
+        };
+        const options = { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+            scales: { x: { stacked: true, ticks: { color: colors.textColor }, grid: { display: false }, max: r.maxVmsPerServer || 1 }, y: { stacked: true, display: false } },
+            plugins: { legend: { display:false }, tooltip: { enabled: false } }
+        };
+        if (this.state.utilizationChart) {
+            this.state.utilizationChart.data = data;
+            this.state.utilizationChart.options.scales.x.max = r.maxVmsPerServer || 1;
+            this.state.utilizationChart.update('none');
+        } else {
+            this.state.utilizationChart = new Chart('utilizationChart', { type: 'bar', data, options });
+        }
+    }
+};
+
+document.addEventListener('DOMContentLoaded', () => App.setup());
+</script>
+</body>
+</html>
